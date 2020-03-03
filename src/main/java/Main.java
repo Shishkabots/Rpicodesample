@@ -24,8 +24,12 @@ import edu.wpi.cscore.VideoSource;
 import edu.wpi.first.cameraserver.CameraServer;
 import edu.wpi.first.networktables.EntryListenerFlags;
 import edu.wpi.first.networktables.NetworkTableInstance;
+import edu.wpi.first.networktables.NetworkTable;
+import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.vision.VisionPipeline;
 import edu.wpi.first.vision.VisionThread;
+import edu.wpi.cscore.CvSink;
+import edu.wpi.cscore.CvSource;
 
 import org.opencv.core.Mat;
 
@@ -74,6 +78,15 @@ import org.opencv.core.Mat;
 
 public final class Main {
   private static String configFile = "/boot/frc.json";
+  public static Thread m_visionThread;
+  public static CvSink cvSink;
+
+  public static GripPipeline pipeline;
+  public static final int imgWidth = 640;
+  public static final int imgHeight = 480;
+  public static Mat img;
+
+  public static UsbCamera camera;
 
   @SuppressWarnings("MemberName")
   public static class CameraConfig {
@@ -295,6 +308,8 @@ public final class Main {
    * Main.
    */
   public static void main(String... args) {
+    pipeline = new GripPipeline();
+
     if (args.length > 0) {
       configFile = args[0];
     }
@@ -306,6 +321,7 @@ public final class Main {
 
     // start NetworkTables
     NetworkTableInstance ntinst = NetworkTableInstance.getDefault();
+    NetworkTable table = ntinst.getTable("Vals");
     if (server) {
       System.out.println("Setting up NetworkTables server");
       ntinst.startServer();
@@ -313,6 +329,8 @@ public final class Main {
       System.out.println("Setting up NetworkTables client for team " + team);
       ntinst.startClientTeam(team);
     }
+    NetworkTableEntry nx = table.getEntry("dx");
+    NetworkTableEntry ny = table.getEntry("dy");
 
     // start cameras
     for (CameraConfig config : cameraConfigs) {
@@ -326,9 +344,26 @@ public final class Main {
 
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
-      VisionThread visionThread = new VisionThread(cameras.get(0),
+     /* VisionThread visionThread = new VisionThread(cameras.get(0),
               new MyPipeline(), pipeline -> {
         // do something with pipeline results
+      });*/
+      m_visionThread = new Thread(() -> {
+        camera = CameraServer.getInstance().startAutomaticCapture();
+        camera.setResolution(640, 480);
+        cvSink = CameraServer.getInstance().getVideo();
+        CvSource outputStream = CameraServer.getInstance().putVideo("Rectangle", 640, 480);
+        img = new Mat();
+        while (!Thread.interrupted()) {
+          if (cvSink.grabFrame(img) == 0) {
+            outputStream.notifyError(cvSink.getError());
+            continue;
+          }
+          outputStream.putFrame(img);
+          continue;
+        }
+  
+        
       });
       /* something like this for GRIP:
       VisionThread visionThread = new VisionThread(cameras.get(0),
@@ -336,7 +371,8 @@ public final class Main {
         ...
       });
        */
-      visionThread.start();
+      m_visionThread.setDaemon(true);
+      m_visionThread.start();
     }
 
     // loop forever
