@@ -30,6 +30,11 @@ import edu.wpi.first.vision.VisionPipeline;
 import edu.wpi.first.vision.VisionThread;
 import edu.wpi.cscore.CvSink;
 import edu.wpi.cscore.CvSource;
+import org.opencv.imgproc.*;
+
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.Scalar;
+import org.opencv.core.Rect;
 
 import org.opencv.core.Mat;
 
@@ -85,6 +90,7 @@ public final class Main {
   public static final int imgWidth = 640;
   public static final int imgHeight = 480;
   public static Mat img;
+  public static Rect boundingRect;
 
   public static UsbCamera camera;
 
@@ -249,7 +255,7 @@ public final class Main {
     CameraServer inst = CameraServer.getInstance();
     UsbCamera camera = new UsbCamera(config.name, config.path);
     MjpegServer server = inst.startAutomaticCapture(camera);
-
+    
     Gson gson = new GsonBuilder().create();
 
     camera.setConfigJson(gson.toJson(config.config));
@@ -329,8 +335,7 @@ public final class Main {
       System.out.println("Setting up NetworkTables client for team " + team);
       ntinst.startClientTeam(team);
     }
-    NetworkTableEntry nx = table.getEntry("dx");
-    NetworkTableEntry ny = table.getEntry("dy");
+    NetworkTableEntry nr = table.getEntry("Rect");
 
     // start cameras
     for (CameraConfig config : cameraConfigs) {
@@ -353,24 +358,47 @@ public final class Main {
         camera.setResolution(640, 480);
         cvSink = CameraServer.getInstance().getVideo();
         CvSource outputStream = CameraServer.getInstance().putVideo("Rectangle", 640, 480);
+        
         img = new Mat();
         while (!Thread.interrupted()) {
           if (cvSink.grabFrame(img) == 0) {
             outputStream.notifyError(cvSink.getError());
             continue;
           }
+          pipeline.process(img);
+          ArrayList<MatOfPoint> contours  = pipeline.filterContoursOutput();
+          
+          for(int i=0;i<contours.size();i++)
+          {
+            Imgproc.drawContours(img, contours,i, new Scalar(0,0,255),5);
+          }
           outputStream.putFrame(img);
-          continue;
         }
   
         
       });
+      ArrayList<MatOfPoint> contours = (ArrayList<MatOfPoint>) pipeline.filterContoursOutput().clone();
+      MatOfPoint contour = null;
+      if(contours.size()>0)      
+      {
+          int index = 0;
+          int largestArea = 0;
+          for (int i = 0; i < contours.size(); i++) {
+              boundingRect = Imgproc.boundingRect(contours.get(i));
+              if (boundingRect.width * boundingRect.height > largestArea) {
+                  index = i;
+              }
+              contour = contours.get(index);
+          }
+      }
+      MjpegServer serv = new MjpegServer("serv1", "serv2", 3);
       /* something like this for GRIP:
       VisionThread visionThread = new VisionThread(cameras.get(0),
               new GripPipeline(), pipeline -> {
         ...
       });
        */
+      nr.setValue(boundingRect);
       m_visionThread.setDaemon(true);
       m_visionThread.start();
     }
