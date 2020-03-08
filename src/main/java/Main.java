@@ -28,8 +28,7 @@ import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableEntry;
 import edu.wpi.first.vision.VisionPipeline;
 import edu.wpi.first.vision.VisionThread;
-import edu.wpi.cscore.CvSink;
-import edu.wpi.cscore.CvSource;
+import edu.wpi.cscore.*;
 import org.opencv.imgproc.*;
 
 import org.opencv.core.MatOfPoint;
@@ -315,6 +314,27 @@ public final class Main {
    */
   public static void main(String... args) {
     pipeline = new GripPipeline();
+    int streamPort = 1185;
+
+    MjpegServer inputStream = new MjpegServer("MJPEG Server", streamPort);
+    camera = setUsbCamera(0, inputStream);
+    // Set the resolution for our camera, since this is over USB
+    camera.setResolution(640,480);
+    camera.setExposureManual(0);
+    
+    CvSink imageSink = new CvSink("CV Image Grabber");
+    imageSink.setSource(camera);
+
+    // This creates a CvSource to use. This will take in a Mat image that has had OpenCV operations
+    // operations 
+    CvSource imageSource = new CvSource("CV Image Source", VideoMode.PixelFormat.kMJPEG, 640, 480, 30);
+    MjpegServer cvStream = new MjpegServer("CV Image Stream", 1186);
+    cvStream.setSource(imageSource);
+
+    // All Mats and Lists should be stored outside the loop to avoid allocations
+    // as they are expensive to create
+    Mat inputImage = new Mat();
+    Mat hsv = new Mat();
 
     if (args.length > 0) {
       configFile = args[0];
@@ -353,16 +373,10 @@ public final class Main {
               new MyPipeline(), pipeline -> {
         // do something with pipeline results
       });*/
-      m_visionThread = new Thread(() -> {
-        camera = CameraServer.getInstance().startAutomaticCapture();
-        camera.setResolution(640, 480);
-        cvSink = CameraServer.getInstance().getVideo();
-        CvSource outputStream = CameraServer.getInstance().putVideo("Rectangle", 640, 480);
-        
-        img = new Mat();
+      m_visionThread = new VisionThread(cameras.get(0), new GripPipeline(), pipeline -> {
         while (!Thread.interrupted()) {
           if (cvSink.grabFrame(img) == 0) {
-            outputStream.notifyError(cvSink.getError());
+            imageSource.notifyError(cvSink.getError());
             continue;
           }
           pipeline.process(img);
@@ -372,10 +386,8 @@ public final class Main {
           {
             Imgproc.drawContours(img, contours,i, new Scalar(0,0,255),5);
           }
-          outputStream.putFrame(img);
+          imageSource.putFrame(img);
         }
-  
-        
       });
       ArrayList<MatOfPoint> contours = (ArrayList<MatOfPoint>) pipeline.filterContoursOutput().clone();
       MatOfPoint contour = null;
@@ -411,5 +423,13 @@ public final class Main {
         return;
       }
     }
+  }
+  private static UsbCamera setUsbCamera(int cameraId, MjpegServer server) {
+    // This gets the image from a USB camera 
+    // Usually this will be on device 0, but there are other overloads
+    // that can be used
+    UsbCamera camera = new UsbCamera("CoprocessorCamera", cameraId);
+    server.setSource(camera);
+    return camera;
   }
 }
