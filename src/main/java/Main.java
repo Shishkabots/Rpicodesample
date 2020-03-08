@@ -388,31 +388,31 @@ public final class Main {
           }
           imageSource.putFrame(img);
         }
+        ArrayList<MatOfPoint> contours = (ArrayList<MatOfPoint>) pipeline.filterContoursOutput().clone();
+        MatOfPoint contour = null;
+        if(contours.size()>0)      
+        {
+            int index = 0;
+            int largestArea = 0;
+            for (int i = 0; i < contours.size(); i++) {
+                boundingRect = Imgproc.boundingRect(contours.get(i));
+                if (boundingRect.width * boundingRect.height > largestArea) {
+                    index = i;
+                }
+                contour = contours.get(index);
+            }
+        }
+        nr.setValue(boundingRect);
+        m_visionThread.setDaemon(true);
+        m_visionThread.start();
       });
-      ArrayList<MatOfPoint> contours = (ArrayList<MatOfPoint>) pipeline.filterContoursOutput().clone();
-      MatOfPoint contour = null;
-      if(contours.size()>0)      
-      {
-          int index = 0;
-          int largestArea = 0;
-          for (int i = 0; i < contours.size(); i++) {
-              boundingRect = Imgproc.boundingRect(contours.get(i));
-              if (boundingRect.width * boundingRect.height > largestArea) {
-                  index = i;
-              }
-              contour = contours.get(index);
-          }
-      }
-      MjpegServer serv = new MjpegServer("serv1", "serv2", 3);
+      
       /* something like this for GRIP:
       VisionThread visionThread = new VisionThread(cameras.get(0),
               new GripPipeline(), pipeline -> {
         ...
       });
        */
-      nr.setValue(boundingRect);
-      m_visionThread.setDaemon(true);
-      m_visionThread.start();
     }
 
     // loop forever
