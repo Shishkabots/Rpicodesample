@@ -369,10 +369,6 @@ public final class Main {
 
     // start image processing on camera 0 if present
     if (cameras.size() >= 1) {
-     /* VisionThread visionThread = new VisionThread(cameras.get(0),
-              new MyPipeline(), pipeline -> {
-        // do something with pipeline results
-      });*/
       m_visionThread = new VisionThread(cameras.get(0), new GripPipeline(), pipeline -> {
         while (!Thread.interrupted()) {
           if (cvSink.grabFrame(img) == 0) {
@@ -402,19 +398,13 @@ public final class Main {
                 contour = contours.get(index);
             }
         }
-        nr.setValue(boundingRect);
+        //nr.setValue(boundingRect);
         m_visionThread.setDaemon(true);
         m_visionThread.start();
       });
       
-      /* something like this for GRIP:
-      VisionThread visionThread = new VisionThread(cameras.get(0),
-              new GripPipeline(), pipeline -> {
-        ...
-      });
-       */
     }
-
+    nr.setString("Pi Test");
     // loop forever
     for (;;) {
       try {
